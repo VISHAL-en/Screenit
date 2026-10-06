@@ -10,132 +10,173 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectGetScreened,
 }) => {
   return (
-    <div className="w-full max-w-5xl mx-auto flex flex-col items-center my-auto py-12 px-4 sm:px-6">
-      {/* Top Identity Marker */}
-      <div className="flex items-center gap-2 mb-6">
-        <span className="font-label-code text-sm text-primary uppercase font-bold tracking-wider">
-          Screenit
-        </span>
-        <span className="h-1 w-1 rounded-full bg-outline"></span>
-        <span className="bg-surface-container-high text-on-surface-variant font-label-caps text-[11px] px-3 py-0.5 rounded-full uppercase font-medium">
-          Local Presentation
+    <div className="w-full max-w-4xl mx-auto flex flex-col items-center py-6 sm:py-12 px-4 sm:px-6 my-auto">
+      {/* Category Pill */}
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80 mb-5 sm:mb-6">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+        <span className="text-xs font-medium text-slate-600">
+          Direct Wireless Presentation
         </span>
       </div>
 
-      {/* Typography Hero */}
-      <div className="text-center max-w-2xl flex flex-col items-center">
-        <h1 className="font-headline-xl text-on-surface tracking-tight mb-3">
+      {/* Hero Headline */}
+      <div className="text-center max-w-2xl flex flex-col items-center mb-8 sm:mb-12">
+        <h1 className="font-headline-xl text-slate-900 tracking-[-0.03em] mb-3 text-center">
           Present without the cable.
         </h1>
-        <p className="font-body-lg text-secondary">
-          Share your screen wirelessly with a display on the same network.
+        <p className="font-body-lg text-slate-500 max-w-xl text-center leading-relaxed">
+          Wirelessly share your screen to a nearby display. No apps, accounts, or cables required.
         </p>
       </div>
 
-      {/* Environmental Status Strip */}
-      <div className="mt-6 mb-10 flex items-center gap-4 px-4 py-1.5 rounded-full bg-surface-container-low border border-outline-variant/30 shadow-xs">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-          <span className="font-label-code text-xs text-secondary font-medium">
-            Local Peer-to-Peer
-          </span>
-        </div>
-        <span className="text-outline-variant font-label-code text-xs">•</span>
-        <span className="font-label-code text-xs text-on-surface-variant">
-          Ultra-Low Latency WebRTC
-        </span>
-      </div>
-
-      {/* Core Interactive Dual-Selector Matrix */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
-        {/* Card 1: Share Screen (Presenter) */}
+      {/* Primary Actions: Share Screen vs Get Screened */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 w-full max-w-2xl mb-12 sm:mb-16">
+        {/* Presenter Action */}
         <button
           onClick={onSelectShareScreen}
-          className="group relative flex flex-col justify-between p-8 rounded-xl bg-surface-container-lowest border border-outline-variant/40 shadow-xs hover:shadow-xl hover:border-primary/40 hover:-translate-y-1 transition-all duration-300 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20"
+          type="button"
+          className="group relative flex flex-col justify-between p-6 sm:p-7 rounded-2xl bg-white border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-md transition-all text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
         >
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <div className="w-14 h-14 rounded-lg bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors duration-200">
-                <span className="material-symbols-outlined text-[32px]">
-                  laptop_chromebook
-                </span>
-              </div>
-              <span className="font-label-caps text-xs uppercase text-secondary group-hover:text-primary tracking-widest font-semibold transition-colors">
-                P-01 • SOURCE
+            <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-900 flex items-center justify-center mb-5 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-150">
+              <span className="material-symbols-outlined text-[22px]">
+                laptop_mac
               </span>
             </div>
-            <span className="font-label-caps text-[11px] tracking-widest uppercase text-outline mb-1.5 block font-semibold">
-              Initiate Stream
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              Presenter
             </span>
-            <h2 className="font-headline-lg text-on-surface font-semibold mb-2 tracking-tight">
-              SHARE SCREEN
+            <h2 className="text-xl font-semibold text-slate-900 tracking-tight mb-1.5">
+              Share Screen
             </h2>
-            <p className="font-body-md text-secondary leading-relaxed">
-              Present your laptop screen on a nearby display with instantaneous peer-to-peer pairing.
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Broadcast your laptop screen, window, or tab to a paired display.
             </p>
           </div>
-          <div className="mt-8 pt-4 border-t border-surface-container-high/60 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 font-headline-md text-base text-primary font-semibold">
-              <span>Start Presenting</span>
-              <span className="material-symbols-outlined text-[20px] transform group-hover:translate-x-1.5 transition-transform duration-200">
+
+          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors inline-flex items-center gap-1">
+              <span>Start presenting</span>
+              <span className="material-symbols-outlined text-[16px] transition-transform group-hover:translate-x-0.5">
                 arrow_forward
               </span>
             </span>
-            <span className="font-label-code text-xs text-outline group-hover:text-primary transition-colors font-medium">
-              Ready
+            <span className="font-mono text-xs text-slate-400">
+              Source
             </span>
           </div>
         </button>
 
-        {/* Card 2: Get Screened (Receiver) */}
+        {/* Receiver Action */}
         <button
           onClick={onSelectGetScreened}
-          className="group relative flex flex-col justify-between p-8 rounded-xl bg-surface-container-lowest border border-outline-variant/40 shadow-xs hover:shadow-xl hover:border-primary/40 hover:-translate-y-1 transition-all duration-300 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20"
+          type="button"
+          className="group relative flex flex-col justify-between p-6 sm:p-7 rounded-2xl bg-white border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-md transition-all text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
         >
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <div className="w-14 h-14 rounded-lg bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors duration-200">
-                <span className="material-symbols-outlined text-[32px]">tv</span>
-              </div>
-              <span className="font-label-caps text-xs uppercase text-secondary group-hover:text-primary tracking-widest font-semibold transition-colors">
-                R-02 • TARGET
+            <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-900 flex items-center justify-center mb-5 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-150">
+              <span className="material-symbols-outlined text-[22px]">
+                tv
               </span>
             </div>
-            <span className="font-label-caps text-[11px] tracking-widest uppercase text-outline mb-1.5 block font-semibold">
-              Standby Mode
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              Display / Projector
             </span>
-            <h2 className="font-headline-lg text-on-surface font-semibold mb-2 tracking-tight">
-              GET SCREENED
+            <h2 className="text-xl font-semibold text-slate-900 tracking-tight mb-1.5">
+              Get Screened
             </h2>
-            <p className="font-body-md text-secondary leading-relaxed">
-              Turn this screen into a wireless presentation display and broadcast pairing credentials.
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Turn this display into a receiver and generate a temporary 4-digit code.
             </p>
           </div>
-          <div className="mt-8 pt-4 border-t border-surface-container-high/60 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 font-headline-md text-base text-primary font-semibold">
-              <span>Open Receiver</span>
-              <span className="material-symbols-outlined text-[20px] transform group-hover:translate-x-1.5 transition-transform duration-200">
+
+          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors inline-flex items-center gap-1">
+              <span>Open receiver</span>
+              <span className="material-symbols-outlined text-[16px] transition-transform group-hover:translate-x-0.5">
                 arrow_forward
               </span>
             </span>
-            <span className="font-label-code text-xs text-outline group-hover:text-primary transition-colors font-medium">
-              Display
+            <span className="font-mono text-xs text-slate-400">
+              Target
             </span>
           </div>
         </button>
       </div>
 
-      {/* Network Protocol Guarantee */}
-      <div className="mt-12 text-center max-w-xl">
-        <div className="inline-flex items-center gap-1.5 text-outline mb-1.5">
-          <span className="material-symbols-outlined text-[16px]">lock</span>
-          <span className="font-label-caps text-[11px] uppercase tracking-wider font-semibold">
-            Zero Deployment Overhead
-          </span>
+      {/* Subtle Visual Demonstration of the Flow */}
+      <div className="w-full max-w-2xl bg-slate-50/80 border border-slate-200/80 rounded-2xl p-5 sm:p-6 mb-10">
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4 text-center">
+          How it works
         </div>
-        <p className="font-body-sm text-secondary">
-          No signups, no downloads, no configuration. Both devices simply need to be connected to the same Wi-Fi or Ethernet.
-        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+          {/* Step 1 */}
+          <div className="flex sm:flex-col items-center sm:items-center text-left sm:text-center gap-3 sm:gap-2">
+            <div className="w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center shrink-0">
+              1
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-900">
+                Open Screenit
+              </div>
+              <div className="text-xs text-slate-500">
+                On both devices
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2 */}
+          <div className="flex sm:flex-col items-center sm:items-center text-left sm:text-center gap-3 sm:gap-2">
+            <div className="w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center shrink-0">
+              2
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-900">
+                Enter 4-Digit Code
+              </div>
+              <div className="text-xs text-slate-500 font-mono">
+                e.g. 4827
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3 */}
+          <div className="flex sm:flex-col items-center sm:items-center text-left sm:text-center gap-3 sm:gap-2">
+            <div className="w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center shrink-0">
+              3
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-900">
+                Present
+              </div>
+              <div className="text-xs text-slate-500">
+                Instant peer-to-peer
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Trust & Product Pillars */}
+      <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-slate-400">
+            lock
+          </span>
+          <span>Peer-to-Peer WebRTC</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-slate-400">
+            bolt
+          </span>
+          <span>Zero installation</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-slate-400">
+            schedule
+          </span>
+          <span>No account required</span>
+        </div>
       </div>
     </div>
   );

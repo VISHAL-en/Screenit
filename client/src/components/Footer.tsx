@@ -1,15 +1,58 @@
 import React from 'react';
 
-export const Footer: React.FC = () => {
+interface FooterProps {
+  onNavigate?: (page: 'FAQ' | 'PRIVACY' | 'TERMS') => void;
+}
+
+export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+  const handleLinkClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    page: 'FAQ' | 'PRIVACY' | 'TERMS'
+  ) => {
+    e.preventDefault();
+    if (onNavigate) {
+      onNavigate(page);
+    }
+  };
+
   return (
-    <footer className="w-full bg-surface py-4 border-t border-outline-variant/15 mt-auto">
-      <div className="max-w-6xl mx-auto px-6 sm:px-8 flex items-center justify-between text-on-surface-variant font-label-caps text-xs">
-        <span className="tracking-wider text-secondary">
-          PEER-TO-PEER WEBRTC • DIRECT LOCAL PRESENTATION
-        </span>
-        <span className="tracking-wider font-label-code text-xs text-outline">
-          SCREENIT v1.0
-        </span>
+    <footer className="w-full bg-white border-t border-slate-200/70 py-6 mt-auto">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+        {/* Brand Statement */}
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-900 tracking-tight">Screenit</span>
+          <span className="text-slate-300">•</span>
+          <span className="text-slate-500">Present without the cable.</span>
+        </div>
+
+        {/* Links & Protocol info */}
+        <div className="flex items-center gap-5 sm:gap-6">
+          <a
+            href="/faq"
+            onClick={(e) => handleLinkClick(e, 'FAQ')}
+            className="hover:text-slate-900 transition-colors"
+          >
+            FAQ
+          </a>
+          <a
+            href="/privacy"
+            onClick={(e) => handleLinkClick(e, 'PRIVACY')}
+            className="hover:text-slate-900 transition-colors"
+          >
+            Privacy Policy
+          </a>
+          <a
+            href="/terms"
+            onClick={(e) => handleLinkClick(e, 'TERMS')}
+            className="hover:text-slate-900 transition-colors"
+          >
+            Terms of Use
+          </a>
+          <span className="hidden md:inline text-slate-300">•</span>
+          <span className="hidden md:inline font-mono text-[11px] text-slate-400">
+            WebRTC P2P
+          </span>
+        </div>
       </div>
     </footer>
   );

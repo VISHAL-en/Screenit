@@ -4,7 +4,10 @@ export type AppState =
   | 'PRESENTER_PAIRING'
   | 'CONNECTING'
   | 'PRESENTER_CONNECTED'
-  | 'RECEIVER_PRESENTATION';
+  | 'RECEIVER_PRESENTATION'
+  | 'FAQ'
+  | 'PRIVACY'
+  | 'TERMS';
 
 export interface SignalingMessage {
   type: string;

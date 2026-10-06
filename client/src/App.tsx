@@ -8,6 +8,9 @@ import { PresenterPairingScreen } from './components/PresenterPairingScreen';
 import { ConnectingScreen } from './components/ConnectingScreen';
 import { PresenterConnectedScreen } from './components/PresenterConnectedScreen';
 import { ReceiverPresentationScreen } from './components/ReceiverPresentationScreen';
+import { FaqScreen } from './components/FaqScreen';
+import { PrivacyPolicyScreen } from './components/PrivacyPolicyScreen';
+import { TermsOfUseScreen } from './components/TermsOfUseScreen';
 
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
@@ -15,6 +18,16 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun1.l.google.com:19302' },
   ],
 };
+
+function getInitialAppState(): AppState {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+    if (path === '/faq') return 'FAQ';
+    if (path === '/privacy') return 'PRIVACY';
+    if (path === '/terms') return 'TERMS';
+  }
+  return 'HOME';
+}
 
 function getSignalingUrl(): string {
   const envUrl = (import.meta.env.VITE_SIGNALING_URL as string | undefined)?.trim();
@@ -36,7 +49,7 @@ function getSignalingUrl(): string {
 }
 
 export const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>('HOME');
+  const [appState, setAppState] = useState<AppState>(getInitialAppState);
   const [pairingCode, setPairingCode] = useState<string>('');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -55,6 +68,13 @@ export const App: React.FC = () => {
   };
 
   const cleanupConnections = useCallback(() => {
+    // Exit fullscreen if active
+    if (typeof document !== 'undefined' && document.fullscreenElement) {
+      document.exitFullscreen().catch((err) => {
+        console.warn('[Screenit] Error exiting fullscreen:', err);
+      });
+    }
+
     // Stop local media tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -371,11 +391,39 @@ export const App: React.FC = () => {
     setAppState('HOME');
   }, [cleanupConnections]);
 
+  // SPA Navigation Helper
+  const navigateTo = useCallback(
+    (page: 'HOME' | 'FAQ' | 'PRIVACY' | 'TERMS') => {
+      cleanupConnections();
+      setErrorMessage(null);
+      setAppState(page);
+      const path = page === 'HOME' ? '/' : `/${page.toLowerCase()}`;
+      if (window.location.pathname !== path) {
+        window.history.pushState({}, '', path);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [cleanupConnections]
+  );
+
+  // Browser back/forward navigation support
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+      if (path === '/faq') setAppState('FAQ');
+      else if (path === '/privacy') setAppState('PRIVACY');
+      else if (path === '/terms') setAppState('TERMS');
+      else setAppState('HOME');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // Cancel connecting or return home
   const handleCancel = useCallback(() => {
-    cleanupConnections();
-    setAppState('HOME');
-  }, [cleanupConnections]);
+    navigateTo('HOME');
+  }, [navigateTo]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -395,10 +443,12 @@ export const App: React.FC = () => {
       <Header
         onGoHome={handleCancel}
         showHomeLink={appState !== 'HOME'}
+        onNavigate={navigateTo}
       />
 
       {/* Main Content Area */}
-      <main className="w-full pt-16 flex-1 flex flex-col justify-center items-center px-4 sm:px-6 py-8 max-w-6xl mx-auto">
+      <main className={`w-full pt-16 flex-1 flex flex-col items-center px-4 sm:px-6 py-8 max-w-6xl mx-auto ${['FAQ', 'PRIVACY', 'TERMS'].includes(appState) ? 'justify-start' : 'justify-center'}`}>
+
         {appState === 'HOME' && (
           <HomeScreen
             onSelectShareScreen={() => {
@@ -439,10 +489,22 @@ export const App: React.FC = () => {
             onStopSharing={handleStopSharing}
           />
         )}
+
+        {appState === 'FAQ' && (
+          <FaqScreen onGoHome={handleCancel} />
+        )}
+
+        {appState === 'PRIVACY' && (
+          <PrivacyPolicyScreen onGoHome={handleCancel} />
+        )}
+
+        {appState === 'TERMS' && (
+          <TermsOfUseScreen onGoHome={handleCancel} />
+        )}
       </main>
 
       {/* Footer */}
-      <Footer />
+      <Footer onNavigate={navigateTo} />
     </div>
   );
 };
