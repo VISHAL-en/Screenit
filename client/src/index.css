@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* Crisp, minimal modern SaaS color palette */
   --color-surface: #ffffff;
@@ -57,6 +59,55 @@
   --spacing-space-xl: 2.5rem;
   --spacing-gutter: 1.5rem;
   --spacing-margin: 2rem;
+}
+
+.dark {
+  --color-surface: #090d16;
+  --color-surface-dim: #060910;
+  --color-surface-bright: #101625;
+  --color-surface-container-lowest: #060910;
+  --color-surface-container-low: #0c121e;
+  --color-surface-container: #111827;
+  --color-surface-container-high: #1e293b;
+  --color-surface-container-highest: #334155;
+  --color-surface-variant: #1e293b;
+  --color-background: #090d16;
+
+  /* Typography Colors */
+  --color-on-surface: #f8fafc;
+  --color-on-surface-variant: #94a3b8;
+  --color-on-background: #f8fafc;
+  --color-secondary: #94a3b8;
+  --color-on-secondary: #0f172a;
+  --color-secondary-container: #1e293b;
+  --color-on-secondary-container: #cbd5e1;
+  --color-outline: #475569;
+  --color-outline-variant: #334155;
+
+  /* Confident Linear Accent */
+  --color-primary: #3b82f6;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #2563eb;
+  --color-on-primary-container: #dbeafe;
+  --color-primary-fixed: #1e293b;
+  --color-primary-fixed-dim: #172554;
+  --color-on-primary-fixed: #93c5fd;
+  --color-on-primary-fixed-variant: #60a5fa;
+  --color-surface-tint: #3b82f6;
+
+  /* Inverted Elements */
+  --color-inverse-surface: #f8fafc;
+  --color-inverse-on-surface: #0f172a;
+  --color-inverse-primary: #2563eb;
+
+  /* Feedback Colors */
+  --color-error: #ef4444;
+  --color-on-error: #ffffff;
+  --color-error-container: #450a0a;
+  --color-on-error-container: #fca5a5;
+  --color-success: #22c55e;
+  --color-success-container: #052e16;
+  --color-on-success-container: #86efac;
 }
 
 @layer base {

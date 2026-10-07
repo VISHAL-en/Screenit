@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { AppState, SignalingMessage } from './types';
+import { useTheme } from './theme';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { HomeScreen } from './components/HomeScreen';
@@ -29,6 +30,10 @@ function getInitialAppState(): AppState {
   return 'HOME';
 }
 
+function isInfoPage(state: AppState | string): boolean {
+  return state === 'FAQ' || state === 'PRIVACY' || state === 'TERMS';
+}
+
 function getSignalingUrl(): string {
   const envUrl = (import.meta.env.VITE_SIGNALING_URL as string | undefined)?.trim();
   if (envUrl) {
@@ -49,11 +54,15 @@ function getSignalingUrl(): string {
 }
 
 export const App: React.FC = () => {
+  const { theme, toggleTheme } = useTheme();
   const [appState, setAppState] = useState<AppState>(getInitialAppState);
   const [pairingCode, setPairingCode] = useState<string>('');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+
+  // Remembers the active state before navigating to informational pages (FAQ/Privacy/Terms)
+  const [savedSessionState, setSavedSessionState] = useState<AppState | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -115,6 +124,19 @@ export const App: React.FC = () => {
     }
   };
 
+  // Presenter intentionally stops sharing
+  const handleStopSharing = useCallback(() => {
+    safeSend({ type: 'STOP_SHARING' });
+    cleanupConnections();
+    setSavedSessionState(null);
+    setAppState('HOME');
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
+  }, [cleanupConnections]);
+
+  const startReceiverSessionRef = useRef<() => void>(() => {});
+
   // ----------------------------------------------------
   // RECEIVER LOGIC
   // ----------------------------------------------------
@@ -151,7 +173,6 @@ export const App: React.FC = () => {
 
         case 'PRESENTER_JOINED': {
           console.log('[Receiver] Presenter joined. Preparing RTCPeerConnection');
-          // Prepare PeerConnection for receiving stream
           const pc = new RTCPeerConnection(RTC_CONFIG);
           pcRef.current = pc;
 
@@ -159,7 +180,13 @@ export const App: React.FC = () => {
             console.log('[Receiver] Received remote stream track');
             const remoteStream = trackEvent.streams[0] || new MediaStream([trackEvent.track]);
             setStream(remoteStream);
-            setAppState('RECEIVER_PRESENTATION');
+            setAppState((currentState) => {
+              if (isInfoPage(currentState)) {
+                setSavedSessionState('RECEIVER_PRESENTATION');
+                return currentState;
+              }
+              return 'RECEIVER_PRESENTATION';
+            });
           };
 
           pc.onicecandidate = (iceEvent) => {
@@ -172,8 +199,7 @@ export const App: React.FC = () => {
             console.log('[Receiver] WebRTC Connection state:', pc.connectionState);
             if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
               console.log('[Receiver] Presenter disconnected via WebRTC state.');
-              // Reset and generate new code
-              startReceiverSession();
+              startReceiverSessionRef.current();
             }
           };
           break;
@@ -211,8 +237,7 @@ export const App: React.FC = () => {
 
         case 'PRESENTER_DISCONNECTED': {
           console.log('[Receiver] Presenter disconnected. Refreshing receiver session with new code.');
-          // Generate new temporary pairing code and return to waiting state
-          startReceiverSession();
+          startReceiverSessionRef.current();
           break;
         }
 
@@ -231,6 +256,10 @@ export const App: React.FC = () => {
       console.error('[Receiver WS] Error:', err);
     };
   }, [cleanupConnections]);
+
+  useEffect(() => {
+    startReceiverSessionRef.current = startReceiverSession;
+  }, [startReceiverSession]);
 
   // ----------------------------------------------------
   // PRESENTER LOGIC
@@ -264,7 +293,6 @@ export const App: React.FC = () => {
           case 'PAIR_SUCCESS': {
             console.log('[Presenter] Pairing successful, requesting getDisplayMedia()');
             try {
-              // 1. Capture screen
               if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
                 throw new Error(
                   'Screen sharing is not supported by this browser or requires a Secure Context (HTTPS).'
@@ -281,7 +309,6 @@ export const App: React.FC = () => {
               localStreamRef.current = displayStream;
               setStream(displayStream);
 
-              // 2. Setup WebRTC PeerConnection
               const pc = new RTCPeerConnection(RTC_CONFIG);
               pcRef.current = pc;
 
@@ -312,14 +339,17 @@ export const App: React.FC = () => {
                 }
               };
 
-              // 3. Create Offer
               const offer = await pc.createOffer();
               await pc.setLocalDescription(offer);
               safeSend({ type: 'SIGNAL_OFFER', sdp: offer });
             } catch (err: any) {
               console.error('[Presenter] Error capturing display media:', err);
               cleanupConnections();
-              setErrorMessage(err?.name === 'NotAllowedError' ? 'Screen capture cancelled or permission denied.' : (err?.message || 'Screen capture cancelled or permission denied.'));
+              setErrorMessage(
+                err?.name === 'NotAllowedError'
+                  ? 'Screen capture cancelled or permission denied.'
+                  : err?.message || 'Screen capture cancelled or permission denied.'
+              );
               setAppState('PRESENTER_PAIRING');
             }
             break;
@@ -356,6 +386,7 @@ export const App: React.FC = () => {
           case 'RECEIVER_DISCONNECTED': {
             console.log('[Presenter] Receiver disconnected');
             cleanupConnections();
+            setSavedSessionState(null);
             setErrorMessage('The display has disconnected.');
             setAppState('PRESENTER_PAIRING');
             break;
@@ -364,6 +395,7 @@ export const App: React.FC = () => {
           case 'ERROR': {
             console.warn('[Presenter] Pairing error:', msg.message);
             cleanupConnections();
+            setSavedSessionState(null);
             setErrorMessage(msg.message || 'Unable to pair with display.');
             setAppState('PRESENTER_PAIRING');
             break;
@@ -377,60 +409,186 @@ export const App: React.FC = () => {
 
       ws.onerror = () => {
         cleanupConnections();
-        setErrorMessage('Could not connect to the signaling server. Please check your network connection and try again.');
+        setSavedSessionState(null);
+        setErrorMessage(
+          'Could not connect to the signaling server. Please check your network connection and try again.'
+        );
         setAppState('PRESENTER_PAIRING');
       };
     },
-    [cleanupConnections]
+    [cleanupConnections, handleStopSharing]
   );
 
-  // Presenter stops sharing
-  const handleStopSharing = useCallback(() => {
-    safeSend({ type: 'STOP_SHARING' });
-    cleanupConnections();
-    setAppState('HOME');
-  }, [cleanupConnections]);
-
   // SPA Navigation Helper
+  // CRITICAL: Navigating to informational pages (FAQ, PRIVACY, TERMS) must NEVER stop active sessions!
   const navigateTo = useCallback(
     (page: 'HOME' | 'FAQ' | 'PRIVACY' | 'TERMS') => {
+      if (isInfoPage(page)) {
+        // Navigating to an informational page
+        // Remember previous active state only if not already on an info page
+        if (!isInfoPage(appState)) {
+          setSavedSessionState(appState);
+        }
+        setAppState(page);
+        const path = `/${page.toLowerCase()}`;
+        if (window.location.pathname !== path) {
+          window.history.pushState({}, '', path);
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      // Page is 'HOME'
+      // If returning from an informational page while an active session exists, restore it
+      if (isInfoPage(appState) && savedSessionState) {
+        const target = savedSessionState;
+        setSavedSessionState(null);
+        setAppState(target);
+        if (window.location.pathname !== '/') {
+          window.history.pushState({}, '', '/');
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      // Intentional return to HOME
       cleanupConnections();
+      setSavedSessionState(null);
       setErrorMessage(null);
-      setAppState(page);
-      const path = page === 'HOME' ? '/' : `/${page.toLowerCase()}`;
-      if (window.location.pathname !== path) {
-        window.history.pushState({}, '', path);
+      setAppState('HOME');
+      if (window.location.pathname !== '/') {
+        window.history.pushState({}, '', '/');
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
-    [cleanupConnections]
+    [appState, savedSessionState, cleanupConnections]
   );
+
+  // Return from informational page back to previous active state
+  const handleReturnFromInfoPage = useCallback(() => {
+    if (savedSessionState) {
+      const targetState = savedSessionState;
+      setSavedSessionState(null);
+      setAppState(targetState);
+    } else if (roleRef.current === 'presenter' && localStreamRef.current) {
+      setAppState('PRESENTER_CONNECTED');
+    } else if (roleRef.current === 'receiver' && stream) {
+      setAppState('RECEIVER_PRESENTATION');
+    } else {
+      setAppState('HOME');
+    }
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [savedSessionState, stream]);
+
+  // Cancel pairing/connecting or return home from an active wizard
+  const handleCancel = useCallback(() => {
+    if (isInfoPage(appState)) {
+      handleReturnFromInfoPage();
+      return;
+    }
+    cleanupConnections();
+    setSavedSessionState(null);
+    setAppState('HOME');
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
+  }, [appState, cleanupConnections, handleReturnFromInfoPage]);
 
   // Browser back/forward navigation support
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
-      if (path === '/faq') setAppState('FAQ');
-      else if (path === '/privacy') setAppState('PRIVACY');
-      else if (path === '/terms') setAppState('TERMS');
-      else setAppState('HOME');
+      if (path === '/faq') {
+        setAppState((curr) => {
+          if (!isInfoPage(curr)) setSavedSessionState(curr);
+          return 'FAQ';
+        });
+      } else if (path === '/privacy') {
+        setAppState((curr) => {
+          if (!isInfoPage(curr)) setSavedSessionState(curr);
+          return 'PRIVACY';
+        });
+      } else if (path === '/terms') {
+        setAppState((curr) => {
+          if (!isInfoPage(curr)) setSavedSessionState(curr);
+          return 'TERMS';
+        });
+      } else {
+        // Path is root '/'
+        setSavedSessionState((prevSaved) => {
+          if (prevSaved) {
+            setAppState(prevSaved);
+            return null;
+          }
+          if (roleRef.current === 'presenter' && localStreamRef.current) {
+            setAppState('PRESENTER_CONNECTED');
+          } else if (roleRef.current === 'receiver' && stream) {
+            setAppState('RECEIVER_PRESENTATION');
+          } else {
+            setAppState('HOME');
+          }
+          return null;
+        });
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [stream]);
 
-  // Cancel connecting or return home
-  const handleCancel = useCallback(() => {
-    navigateTo('HOME');
-  }, [navigateTo]);
-
-  // Cleanup on unmount
+  // Cleanup connections on actual tab/window close
   useEffect(() => {
-    return () => {
+    const handleBeforeUnload = () => {
       cleanupConnections();
     };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [cleanupConnections]);
+
+  // Determine active session badge & button label when browsing informational pages
+  const isPresenterSharing =
+    (savedSessionState === 'PRESENTER_CONNECTED' || appState === 'PRESENTER_CONNECTED') &&
+    stream !== null;
+
+  const isReceiverPresenting =
+    (savedSessionState === 'RECEIVER_PRESENTATION' || appState === 'RECEIVER_PRESENTATION') &&
+    stream !== null;
+
+  const isReceiverWaiting =
+    savedSessionState === 'RECEIVER_WAITING' && pairingCode !== '';
+
+  let activeSessionBadge = null;
+  if (isInfoPage(appState)) {
+    if (isPresenterSharing) {
+      activeSessionBadge = {
+        label: `Sharing Active (Display ${pairingCode || 'Paired'})`,
+        actionLabel: 'Return to Sharing',
+        onAction: handleReturnFromInfoPage,
+      };
+    } else if (isReceiverPresenting) {
+      activeSessionBadge = {
+        label: 'Display Active',
+        actionLabel: 'Return to Presentation',
+        onAction: handleReturnFromInfoPage,
+      };
+    } else if (isReceiverWaiting) {
+      activeSessionBadge = {
+        label: `Receiver Waiting (${pairingCode || 'Ready'})`,
+        actionLabel: 'Return to Receiver',
+        onAction: handleReturnFromInfoPage,
+      };
+    }
+  }
+
+  const getBackLabel = (): string => {
+    if (isPresenterSharing) return 'Back to Sharing';
+    if (isReceiverPresenting) return 'Back to Presentation';
+    if (isReceiverWaiting) return 'Back to Receiver';
+    return 'Back to Home';
+  };
 
   // In RECEIVER_PRESENTATION state, the UI must completely disappear
   if (appState === 'RECEIVER_PRESENTATION') {
@@ -438,17 +596,24 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col justify-between select-none">
+    <div className="bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col justify-between select-none transition-colors">
       {/* Header */}
       <Header
-        onGoHome={handleCancel}
-        showHomeLink={appState !== 'HOME'}
+        onGoHome={isInfoPage(appState) ? handleReturnFromInfoPage : handleCancel}
+        showHomeLink={appState !== 'HOME' && appState !== 'PRESENTER_CONNECTED'}
+        homeLinkText={getBackLabel()}
         onNavigate={navigateTo}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        activeSessionBadge={activeSessionBadge}
       />
 
       {/* Main Content Area */}
-      <main className={`w-full pt-16 flex-1 flex flex-col items-center px-4 sm:px-6 py-8 max-w-6xl mx-auto ${['FAQ', 'PRIVACY', 'TERMS'].includes(appState) ? 'justify-start' : 'justify-center'}`}>
-
+      <main
+        className={`w-full pt-16 flex-1 flex flex-col items-center px-4 sm:px-6 py-8 max-w-6xl mx-auto ${
+          isInfoPage(appState) ? 'justify-start' : 'justify-center'
+        }`}
+      >
         {appState === 'HOME' && (
           <HomeScreen
             onSelectShareScreen={() => {
@@ -491,15 +656,24 @@ export const App: React.FC = () => {
         )}
 
         {appState === 'FAQ' && (
-          <FaqScreen onGoHome={handleCancel} />
+          <FaqScreen
+            onGoHome={handleReturnFromInfoPage}
+            backLabel={getBackLabel()}
+          />
         )}
 
         {appState === 'PRIVACY' && (
-          <PrivacyPolicyScreen onGoHome={handleCancel} />
+          <PrivacyPolicyScreen
+            onGoHome={handleReturnFromInfoPage}
+            backLabel={getBackLabel()}
+          />
         )}
 
         {appState === 'TERMS' && (
-          <TermsOfUseScreen onGoHome={handleCancel} />
+          <TermsOfUseScreen
+            onGoHome={handleReturnFromInfoPage}
+            backLabel={getBackLabel()}
+          />
         )}
       </main>
 

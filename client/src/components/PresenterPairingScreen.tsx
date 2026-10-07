@@ -14,15 +14,14 @@ export const PresenterPairingScreen: React.FC<PresenterPairingScreenProps> = ({
   isConnecting = false,
 }) => {
   const [digits, setDigits] = useState<string[]>(['', '', '', '']);
-  const inputRefs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ];
+  const input0Ref = useRef<HTMLInputElement>(null);
+  const input1Ref = useRef<HTMLInputElement>(null);
+  const input2Ref = useRef<HTMLInputElement>(null);
+  const input3Ref = useRef<HTMLInputElement>(null);
+  const inputRefs = [input0Ref, input1Ref, input2Ref, input3Ref];
 
   useEffect(() => {
-    inputRefs[0].current?.focus();
+    input0Ref.current?.focus();
   }, []);
 
   const handleChange = (index: number, value: string) => {
@@ -84,25 +83,25 @@ export const PresenterPairingScreen: React.FC<PresenterPairingScreenProps> = ({
         <button
           onClick={onBack}
           type="button"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors cursor-pointer group"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors cursor-pointer group"
         >
           <span className="material-symbols-outlined text-[16px] transition-transform group-hover:-translate-x-0.5">
             arrow_back
           </span>
           <span>Back</span>
         </button>
-        <span className="font-mono text-xs text-slate-400">
+        <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
           Presenter Mode
         </span>
       </div>
 
       {/* Main Card */}
-      <div className="w-full bg-white border border-slate-200 rounded-2xl shadow-xs p-6 sm:p-10 flex flex-col items-center text-center">
+      <div className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs p-6 sm:p-10 flex flex-col items-center text-center transition-colors">
         {/* Title & Subtitle */}
-        <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight mb-2">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight mb-2">
           Enter display code
         </h1>
-        <p className="text-sm text-slate-500 max-w-sm mb-8 leading-relaxed">
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mb-8 leading-relaxed">
           Type the 4-digit code shown on the receiver screen to start presenting.
         </p>
 
@@ -123,7 +122,7 @@ export const PresenterPairingScreen: React.FC<PresenterPairingScreenProps> = ({
                 onPaste={handlePaste}
                 disabled={isConnecting}
                 aria-label={`Digit ${index + 1} of 4`}
-                className="w-14 h-18 sm:w-16 sm:h-20 bg-slate-50 border border-slate-200 text-slate-900 font-mono text-3xl sm:text-4xl font-semibold text-center rounded-xl shadow-xs focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-100/60 focus:outline-none transition-all select-all disabled:opacity-50"
+                className="w-14 h-18 sm:w-16 sm:h-20 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-3xl sm:text-4xl font-semibold text-center rounded-xl shadow-xs focus:bg-white dark:focus:bg-slate-800 focus:border-blue-600 dark:focus:border-blue-500 focus:ring-4 focus:ring-blue-100/60 dark:focus:ring-blue-900/40 focus:outline-none transition-all select-all disabled:opacity-50"
               />
             ))}
           </div>
@@ -131,12 +130,12 @@ export const PresenterPairingScreen: React.FC<PresenterPairingScreenProps> = ({
           {/* Status Message */}
           <div className="h-5 flex items-center justify-center mb-6">
             {isComplete ? (
-              <span className="text-xs font-medium text-emerald-600 flex items-center gap-1">
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <span className="material-symbols-outlined text-[16px]">check_circle</span>
                 <span>Ready to connect</span>
               </span>
             ) : (
-              <span className="text-xs text-slate-400 font-medium">
+              <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
                 {4 - code.length} {4 - code.length === 1 ? 'digit' : 'digits'} remaining
               </span>
             )}
@@ -144,8 +143,8 @@ export const PresenterPairingScreen: React.FC<PresenterPairingScreenProps> = ({
 
           {/* Error Alert */}
           {errorMessage && (
-            <div className="w-full max-w-md mb-6 p-3 rounded-xl bg-red-50 border border-red-200/80 text-red-800 flex items-start gap-2.5 text-left text-xs leading-relaxed">
-              <span className="material-symbols-outlined text-[18px] text-red-600 shrink-0 mt-0.5">
+            <div className="w-full max-w-md mb-6 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200/80 dark:border-red-900/60 text-red-800 dark:text-red-300 flex items-start gap-2.5 text-left text-xs leading-relaxed">
+              <span className="material-symbols-outlined text-[18px] text-red-600 dark:text-red-400 shrink-0 mt-0.5">
                 error
               </span>
               <span>{errorMessage}</span>
@@ -158,8 +157,8 @@ export const PresenterPairingScreen: React.FC<PresenterPairingScreenProps> = ({
             disabled={!isComplete || isConnecting}
             className={`w-full h-11 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold transition-all ${
               isComplete && !isConnecting
-                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs cursor-pointer active:scale-[0.99]'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                ? 'bg-blue-600 text-white hover:bg-blue-700 dark:hover:bg-blue-500 shadow-xs cursor-pointer active:scale-[0.99]'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
             }`}
           >
             {isConnecting ? (

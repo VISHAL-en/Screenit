@@ -38,7 +38,10 @@ export const ReceiverPresentationScreen: React.FC<ReceiverPresentationScreenProp
   }, []);
 
   useEffect(() => {
-    requestFullscreen();
+    const timer = setTimeout(() => {
+      requestFullscreen();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [requestFullscreen]);
 
   useEffect(() => {

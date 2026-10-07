@@ -23,20 +23,20 @@ export const PresenterConnectedScreen: React.FC<PresenterConnectedScreenProps> =
     <div className="w-full max-w-3xl mx-auto flex flex-col items-center py-6 sm:py-8 px-4 my-auto">
       {/* Top Status */}
       <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium mb-3">
-          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-medium mb-3 transition-colors">
+          <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse"></span>
           <span>Live presentation on Display {code}</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight mb-1">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight mb-1">
           You're sharing
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Your screen is currently visible on the display.
         </p>
       </div>
 
       {/* Stream Preview Panel */}
-      <div className="w-full bg-white border border-slate-200 rounded-2xl shadow-xs p-5 sm:p-6 flex flex-col gap-5">
+      <div className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs p-5 sm:p-6 flex flex-col gap-5 transition-colors">
         <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center shadow-inner">
           <video
             ref={videoRef}
@@ -49,8 +49,8 @@ export const PresenterConnectedScreen: React.FC<PresenterConnectedScreenProps> =
 
         {/* Action Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <span className="material-symbols-outlined text-[16px] text-slate-400">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <span className="material-symbols-outlined text-[16px] text-slate-400 dark:text-slate-500">
               lock
             </span>
             <span>Direct Peer-to-Peer Link</span>
