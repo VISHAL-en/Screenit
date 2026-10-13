@@ -1,11 +1,17 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import type { ConnectionDiagnostics } from '../types';
+import { DiagnosticsOverlay } from './DiagnosticsOverlay';
 
 interface ReceiverPresentationScreenProps {
   stream: MediaStream | null;
+  diagnostics?: ConnectionDiagnostics;
+  recoveryMessage?: string | null;
 }
 
 export const ReceiverPresentationScreen: React.FC<ReceiverPresentationScreenProps> = ({
   stream,
+  diagnostics,
+  recoveryMessage,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -13,10 +19,39 @@ export const ReceiverPresentationScreen: React.FC<ReceiverPresentationScreenProp
     return typeof document !== 'undefined' ? !!document.fullscreenElement : false;
   });
   const [fullscreenFailed, setFullscreenFailed] = useState<boolean>(false);
+  const [showControls, setShowControls] = useState<boolean>(true);
+  const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMouseMove = useCallback(() => {
+    setShowControls(true);
+    if (hideControlsTimerRef.current) {
+      clearTimeout(hideControlsTimerRef.current);
+    }
+    if (isFullscreen) {
+      hideControlsTimerRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
+    }
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimerRef.current) {
+        clearTimeout(hideControlsTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      if ('playoutDelayHint' in (videoRef.current as any)) {
+        try {
+          (videoRef.current as any).playoutDelayHint = 0;
+        } catch {
+          // Ignore unsupported browser property
+        }
+      }
       videoRef.current.play().catch((err) => {
         console.warn('Autoplay may have been blocked or delayed:', err);
       });
@@ -100,8 +135,9 @@ export const ReceiverPresentationScreen: React.FC<ReceiverPresentationScreenProp
     <div
       ref={containerRef}
       onDoubleClick={toggleFullscreen}
+      onMouseMove={handleMouseMove}
       className={`fixed inset-0 w-screen h-screen bg-black overflow-hidden z-50 flex items-center justify-center m-0 p-0 ${
-        isFullscreen ? 'cursor-none' : 'cursor-default'
+        isFullscreen ? (showControls ? 'cursor-default' : 'cursor-none') : 'cursor-default'
       }`}
     >
       <video
@@ -125,6 +161,15 @@ export const ReceiverPresentationScreen: React.FC<ReceiverPresentationScreenProp
           </span>
           <span>Enter Fullscreen</span>
         </button>
+      )}
+
+      {diagnostics && (
+        <DiagnosticsOverlay
+          diagnostics={diagnostics}
+          recoveryMessage={recoveryMessage}
+          role="receiver"
+          showControls={showControls}
+        />
       )}
     </div>
   );

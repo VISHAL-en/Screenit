@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "test:signaling": "tsx src/test-signaling.ts",
-    "test:validation": "tsx src/test-validation.ts"
+    "test:validation": "tsx src/test-validation.ts",
+    "test:recovery": "tsx src/test-recovery.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

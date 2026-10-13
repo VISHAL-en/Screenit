@@ -1,15 +1,21 @@
 import React, { useEffect, useRef } from 'react';
+import type { ConnectionDiagnostics } from '../types';
+import { DiagnosticsOverlay } from './DiagnosticsOverlay';
 
 interface PresenterConnectedScreenProps {
   code: string;
   stream: MediaStream | null;
   onStopSharing: () => void;
+  diagnostics?: ConnectionDiagnostics;
+  recoveryMessage?: string | null;
 }
 
 export const PresenterConnectedScreen: React.FC<PresenterConnectedScreenProps> = ({
   code,
   stream,
   onStopSharing,
+  diagnostics,
+  recoveryMessage,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -68,6 +74,14 @@ export const PresenterConnectedScreen: React.FC<PresenterConnectedScreenProps> =
           </button>
         </div>
       </div>
+
+      {diagnostics && (
+        <DiagnosticsOverlay
+          diagnostics={diagnostics}
+          recoveryMessage={recoveryMessage}
+          role="presenter"
+        />
+      )}
     </div>
   );
 };

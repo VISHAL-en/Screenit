@@ -60,4 +60,20 @@ npm run test:signaling
 
 # Verify security & validation (invalid codes, malformed payloads, duplicate presenter lock)
 npm run test:validation
+
+# Verify session recovery, grace periods, token security, and keep-alive heartbeats
+npm run test:recovery
+
+# Run all test suites
+npm test
 ```
+
+### 5. Diagnostics Overlay
+During an active session, press **`D`** on your keyboard (or click the subtle Stats badge) to inspect real-time connection diagnostics:
+- WebSocket signaling health
+- WebRTC connection & ICE state
+- Screen capture resolution & framerate
+- Inbound/outbound bitrate
+- Round-trip time (RTT), latency, packet loss, and jitter
+- Network link path (`LAN / Host`, `STUN / NAT`, `Relay`)
+
