@@ -7,6 +7,7 @@ async function testSecurityAndValidation() {
 
   // Test 1: Non-existent code
   const ws1 = new WebSocket(WS_URL);
+  ws1.on('error', (err) => console.warn('ws1 socket error:', err.message));
   await new Promise((resolve) => {
     ws1.on('open', () => {
       ws1.send(JSON.stringify({ type: 'JOIN_AS_PRESENTER', code: '0000' }));
@@ -23,6 +24,7 @@ async function testSecurityAndValidation() {
 
   // Test 2: Invalid code format
   const ws2 = new WebSocket(WS_URL);
+  ws2.on('error', (err) => console.warn('ws2 socket error:', err.message));
   await new Promise((resolve) => {
     ws2.on('open', () => {
       ws2.send(JSON.stringify({ type: 'JOIN_AS_PRESENTER', code: 'abcd' }));
@@ -39,6 +41,7 @@ async function testSecurityAndValidation() {
 
   // Test 3: Malformed JSON
   const ws3 = new WebSocket(WS_URL);
+  ws3.on('error', (err) => console.warn('ws3 socket error:', err.message));
   await new Promise((resolve) => {
     ws3.on('open', () => {
       ws3.send('this is not json');
@@ -55,6 +58,7 @@ async function testSecurityAndValidation() {
 
   // Test 4: Prevent second presenter taking over active receiver
   const receiverWs = new WebSocket(WS_URL);
+  receiverWs.on('error', (err) => console.warn('receiverWs socket error:', err.message));
   let activeCode = '';
   await new Promise((resolve) => {
     receiverWs.on('open', () => receiverWs.send(JSON.stringify({ type: 'REGISTER_RECEIVER' })));
@@ -68,6 +72,7 @@ async function testSecurityAndValidation() {
   });
 
   const presenter1Ws = new WebSocket(WS_URL);
+  presenter1Ws.on('error', (err) => console.warn('presenter1Ws socket error:', err.message));
   await new Promise((resolve) => {
     presenter1Ws.on('open', () => presenter1Ws.send(JSON.stringify({ type: 'JOIN_AS_PRESENTER', code: activeCode })));
     presenter1Ws.on('message', (data) => {
@@ -80,6 +85,7 @@ async function testSecurityAndValidation() {
   });
 
   const presenter2Ws = new WebSocket(WS_URL);
+  presenter2Ws.on('error', (err) => console.warn('presenter2Ws socket error:', err.message));
   await new Promise((resolve) => {
     presenter2Ws.on('open', () => presenter2Ws.send(JSON.stringify({ type: 'JOIN_AS_PRESENTER', code: activeCode })));
     presenter2Ws.on('message', (data) => {
