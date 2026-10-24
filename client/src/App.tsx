@@ -68,6 +68,7 @@ export const App: React.FC = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isReceiverConnecting, setIsReceiverConnecting] = useState<boolean>(false);
   const [diagnostics, setDiagnostics] = useState<ConnectionDiagnostics | null>(null);
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
 
@@ -77,6 +78,7 @@ export const App: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const roleRef = useRef<'receiver' | 'presenter' | null>(null);
 
@@ -86,9 +88,23 @@ export const App: React.FC = () => {
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const receiverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
   const webrtcGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevStatsRef = useRef<{ bytes: number; timestamp: number }>({ bytes: 0, timestamp: 0 });
+
+  // Pre-warm the signaling server via HTTP /health on app mount to eliminate cold-start latency
+  useEffect(() => {
+    try {
+      const signalingUrl = getSignalingUrl();
+      const httpUrl = signalingUrl
+        .replace(/^wss:\/\//i, 'https://')
+        .replace(/^ws:\/\//i, 'http://');
+      fetch(`${httpUrl}/health`, { mode: 'cors' }).catch(() => {});
+    } catch {
+      // Ignore pre-warm errors
+    }
+  }, []);
 
   const safeSend = (data: unknown) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -238,6 +254,11 @@ export const App: React.FC = () => {
       reconnectTimerRef.current = null;
     }
 
+    if (receiverTimeoutRef.current) {
+      clearTimeout(receiverTimeoutRef.current);
+      receiverTimeoutRef.current = null;
+    }
+
     if (webrtcGraceTimerRef.current) {
       clearTimeout(webrtcGraceTimerRef.current);
       webrtcGraceTimerRef.current = null;
@@ -255,6 +276,7 @@ export const App: React.FC = () => {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
+    streamRef.current = null;
 
     // Close PeerConnection
     if (pcRef.current) {
@@ -278,14 +300,15 @@ export const App: React.FC = () => {
     reconnectAttemptsRef.current = 0;
     setStream(null);
     setIsConnecting(false);
+    setIsReceiverConnecting(false);
     setRecoveryMessage(null);
   }, [stopHeartbeat, stopDiagnosticsLoop]);
 
   // Flush queued ICE candidates once remote description is set
   const processPendingIceCandidates = (pc: RTCPeerConnection) => {
-    const queue = pendingIceCandidatesRef.current;
-    while (queue.length > 0) {
-      const cand = queue.shift();
+    const queue = [...pendingIceCandidatesRef.current];
+    pendingIceCandidatesRef.current = [];
+    for (const cand of queue) {
       if (cand) {
         pc.addIceCandidate(new RTCIceCandidate(cand)).catch((err) => {
           console.warn('[WebRTC] Error adding queued ICE candidate:', err);
@@ -380,10 +403,13 @@ export const App: React.FC = () => {
             if (!pc || !msg.sdp) return;
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-              processPendingIceCandidates(pc);
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
-              safeSend({ type: 'SIGNAL_ANSWER', sdp: answer });
+              safeSend({
+                type: 'SIGNAL_ANSWER',
+                sdp: { type: answer.type, sdp: answer.sdp },
+              });
+              processPendingIceCandidates(pc);
             } catch (err) {
               console.error('[WS Reconnect] Error handling offer:', err);
             }
@@ -403,9 +429,9 @@ export const App: React.FC = () => {
           }
 
           case 'SIGNAL_ICE': {
+            if (!msg.candidate) return;
             const pc = pcRef.current;
-            if (!pc || !msg.candidate) return;
-            if (pc.remoteDescription) {
+            if (pc && pc.remoteDescription && pc.signalingState !== 'closed') {
               pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
             } else {
               pendingIceCandidatesRef.current.push(msg.candidate);
@@ -461,19 +487,106 @@ export const App: React.FC = () => {
   // ----------------------------------------------------
   // RECEIVER LOGIC
   // ----------------------------------------------------
+  const setupReceiverPeerConnection = useCallback(() => {
+    console.log('[WebRTC] Initializing Receiver RTCPeerConnection');
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    pcRef.current = pc;
+
+    pc.ontrack = (trackEvent) => {
+      console.log(`[WebRTC] Remote track arrived: kind=${trackEvent.track.kind}, id=${trackEvent.track.id}`);
+      let remoteStream = streamRef.current;
+      if (!remoteStream) {
+        remoteStream = trackEvent.streams[0] || new MediaStream([trackEvent.track]);
+        streamRef.current = remoteStream;
+      } else if (!remoteStream.getTracks().includes(trackEvent.track)) {
+        remoteStream.addTrack(trackEvent.track);
+      }
+      setStream(remoteStream);
+      startDiagnosticsLoop();
+      setAppState((currentState) => {
+        if (isInfoPage(currentState)) {
+          setSavedSessionState('RECEIVER_PRESENTATION');
+          return currentState;
+        }
+        return 'RECEIVER_PRESENTATION';
+      });
+    };
+
+    pc.onicecandidate = (iceEvent) => {
+      if (iceEvent.candidate) {
+        console.log('[WebRTC] Receiver generated local ICE candidate');
+        const cand = iceEvent.candidate.toJSON
+          ? iceEvent.candidate.toJSON()
+          : {
+              candidate: iceEvent.candidate.candidate,
+              sdpMid: iceEvent.candidate.sdpMid,
+              sdpMLineIndex: iceEvent.candidate.sdpMLineIndex,
+              usernameFragment: iceEvent.candidate.usernameFragment,
+            };
+        safeSend({ type: 'SIGNAL_ICE', candidate: cand });
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] Receiver ICE connection state:', pc.iceConnectionState);
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log('[WebRTC] Receiver peer connection state:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        if (webrtcGraceTimerRef.current) {
+          clearTimeout(webrtcGraceTimerRef.current);
+          webrtcGraceTimerRef.current = null;
+        }
+        setRecoveryMessage(null);
+      } else if (pc.connectionState === 'disconnected') {
+        setRecoveryMessage('Connection interrupted, attempting to resume...');
+        if (webrtcGraceTimerRef.current) clearTimeout(webrtcGraceTimerRef.current);
+        webrtcGraceTimerRef.current = setTimeout(() => {
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            console.log('[WebRTC] Receiver WebRTC grace period expired.');
+            setRecoveryMessage('Connection lost with presenter.');
+          }
+        }, 6000);
+      } else if (pc.connectionState === 'failed') {
+        console.log('[WebRTC] Receiver WebRTC connection failed.');
+        setRecoveryMessage('Direct peer connection failed. Please ensure both devices are on the same local network.');
+      }
+    };
+
+    return pc;
+  }, [startDiagnosticsLoop]);
+
   const startReceiverSession = useCallback(() => {
     cleanupConnections();
     isIntentionalStopRef.current = false;
     roleRef.current = 'receiver';
     setErrorMessage(null);
+    setPairingCode('');
+    setIsReceiverConnecting(true);
     setAppState('RECEIVER_WAITING');
+
+    if (receiverTimeoutRef.current) {
+      clearTimeout(receiverTimeoutRef.current);
+    }
+    receiverTimeoutRef.current = setTimeout(() => {
+      if (!sessionCodeRef.current) {
+        console.warn('[Signaling] Receiver pairing code request timed out (15s)');
+        setIsReceiverConnecting(false);
+        setErrorMessage('Signaling server took too long to respond. The server may be waking up. Please retry.');
+      }
+    }, 15000);
 
     const ws = new WebSocket(getSignalingUrl());
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[Receiver WS] Connected, registering receiver');
-      safeSend({ type: 'REGISTER_RECEIVER' });
+      console.log('[Signaling] Receiver WebSocket connected, registering receiver');
+      try {
+        ws.send(JSON.stringify({ type: 'REGISTER_RECEIVER' }));
+      } catch (err) {
+        console.warn('[Signaling] Error sending REGISTER_RECEIVER:', err);
+      }
       startHeartbeat();
     };
 
@@ -487,8 +600,14 @@ export const App: React.FC = () => {
 
       switch (msg.type) {
         case 'RECEIVER_REGISTERED': {
+          if (receiverTimeoutRef.current) {
+            clearTimeout(receiverTimeoutRef.current);
+            receiverTimeoutRef.current = null;
+          }
+          setIsReceiverConnecting(false);
+          setErrorMessage(null);
           if (msg.code) {
-            console.log('[Receiver] Registered with pairing code:', msg.code);
+            console.log(`[Signaling] Receiver registered with code: ${msg.code}`);
             sessionCodeRef.current = msg.code;
             sessionTokenRef.current = msg.token || '';
             setPairingCode(msg.code);
@@ -497,81 +616,46 @@ export const App: React.FC = () => {
         }
 
         case 'PRESENTER_JOINED': {
-          console.log('[Receiver] Presenter joined. Preparing RTCPeerConnection');
-          const pc = new RTCPeerConnection(RTC_CONFIG);
-          pcRef.current = pc;
-
-          pc.ontrack = (trackEvent) => {
-            console.log('[Receiver] Received remote stream track');
-            const remoteStream = trackEvent.streams[0] || new MediaStream([trackEvent.track]);
-            setStream(remoteStream);
-            startDiagnosticsLoop();
-            setAppState((currentState) => {
-              if (isInfoPage(currentState)) {
-                setSavedSessionState('RECEIVER_PRESENTATION');
-                return currentState;
-              }
-              return 'RECEIVER_PRESENTATION';
-            });
-          };
-
-          pc.onicecandidate = (iceEvent) => {
-            if (iceEvent.candidate) {
-              safeSend({ type: 'SIGNAL_ICE', candidate: iceEvent.candidate.toJSON() });
-            }
-          };
-
-          pc.onconnectionstatechange = () => {
-            console.log('[Receiver] WebRTC Connection state:', pc.connectionState);
-            if (pc.connectionState === 'connected') {
-              if (webrtcGraceTimerRef.current) {
-                clearTimeout(webrtcGraceTimerRef.current);
-                webrtcGraceTimerRef.current = null;
-              }
-              setRecoveryMessage(null);
-            } else if (pc.connectionState === 'disconnected') {
-              // Temporary Wi-Fi interruption: give 6-second grace period for auto-recovery
-              setRecoveryMessage('Connection interrupted, attempting to resume...');
-              if (webrtcGraceTimerRef.current) clearTimeout(webrtcGraceTimerRef.current);
-              webrtcGraceTimerRef.current = setTimeout(() => {
-                if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-                  console.log('[Receiver] WebRTC grace period expired.');
-                  startReceiverSessionRef.current();
-                }
-              }, 6000);
-            } else if (pc.connectionState === 'failed') {
-              console.log('[Receiver] WebRTC connection failed.');
-              startReceiverSessionRef.current();
-            }
-          };
+          console.log('[Signaling] Presenter joined. Preparing RTCPeerConnection');
+          pendingIceCandidatesRef.current = [];
+          setupReceiverPeerConnection();
           break;
         }
 
         case 'SIGNAL_OFFER': {
-          const pc = pcRef.current;
-          if (!pc || !msg.sdp) return;
-          console.log('[Receiver] Received SDP offer, creating answer');
+          console.log('[WebRTC] Received SDP Offer from presenter');
+          let pc = pcRef.current;
+          if (!pc) {
+            pc = setupReceiverPeerConnection();
+          }
+          if (!msg.sdp) return;
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-            processPendingIceCandidates(pc);
-
+            console.log('[WebRTC] Receiver setRemoteDescription succeeded');
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            safeSend({ type: 'SIGNAL_ANSWER', sdp: answer });
+            console.log('[WebRTC] Receiver created and set local answer, sending SIGNAL_ANSWER');
+            safeSend({
+              type: 'SIGNAL_ANSWER',
+              sdp: { type: answer.type, sdp: answer.sdp },
+            });
+            processPendingIceCandidates(pc);
           } catch (err) {
-            console.error('[Receiver] Error handling offer:', err);
+            console.error('[WebRTC] Receiver error handling SDP Offer:', err);
+            setRecoveryMessage('Failed to negotiate WebRTC connection with presenter.');
           }
           break;
         }
 
         case 'SIGNAL_ICE': {
+          if (!msg.candidate) return;
           const pc = pcRef.current;
-          if (!pc || !msg.candidate) return;
-          if (pc.remoteDescription) {
+          if (pc && pc.remoteDescription && pc.signalingState !== 'closed') {
             pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch((err) => {
-              console.warn('[Receiver] Error adding ICE candidate:', err);
+              console.warn('[WebRTC] Receiver error adding ICE candidate:', err);
             });
           } else {
+            console.log('[WebRTC] Queued ICE candidate on receiver (waiting for remote description)');
             pendingIceCandidatesRef.current.push(msg.candidate);
           }
           break;
@@ -593,30 +677,66 @@ export const App: React.FC = () => {
         }
 
         case 'PRESENTER_DISCONNECTED': {
-          console.log('[Receiver] Presenter disconnected. Refreshing receiver session with new code.');
-          startReceiverSessionRef.current();
+          console.log('[Signaling] Receiver received PRESENTER_DISCONNECTED:', msg.reason);
+          // If presenter disconnected/cancelled before stream started, the server reset session to 'waiting'.
+          // Keep the receiver session and pairing code active!
+          if (!streamRef.current && (roleRef.current === 'receiver')) {
+            console.log('[Signaling] Presenter cancelled during pairing. Keeping pairing code active.');
+            if (pcRef.current) {
+              pcRef.current.close();
+              pcRef.current = null;
+            }
+            pendingIceCandidatesRef.current = [];
+            setRecoveryMessage(null);
+          } else {
+            // Presentation ended intentionally, get a fresh code
+            startReceiverSessionRef.current();
+          }
           break;
         }
 
         case 'ERROR': {
-          console.warn('[Receiver] Server error:', msg.message);
+          console.warn('[Signaling] Receiver server error:', msg.message);
+          if (!sessionCodeRef.current) {
+            if (receiverTimeoutRef.current) {
+              clearTimeout(receiverTimeoutRef.current);
+              receiverTimeoutRef.current = null;
+            }
+            setIsReceiverConnecting(false);
+            setErrorMessage(msg.message || 'Unable to register receiver with server.');
+          }
           break;
         }
       }
     };
 
-    ws.onclose = () => {
-      console.log('[Receiver WS] Disconnected');
+    ws.onclose = (event) => {
+      console.log('[WS] Receiver socket closed:', event.code, event.reason);
       stopHeartbeat();
-      if (!isIntentionalStopRef.current && (pcRef.current || stream)) {
+      if (!sessionCodeRef.current) {
+        if (receiverTimeoutRef.current) {
+          clearTimeout(receiverTimeoutRef.current);
+          receiverTimeoutRef.current = null;
+        }
+        setIsReceiverConnecting(false);
+        setErrorMessage('Could not connect to signaling server. Please check your network and try again.');
+      } else if (!isIntentionalStopRef.current && (pcRef.current || streamRef.current)) {
         attemptWsReconnect();
       }
     };
 
     ws.onerror = (err) => {
-      console.error('[Receiver WS] Error:', err);
+      console.error('[WS] Receiver socket error:', err);
+      if (!sessionCodeRef.current) {
+        if (receiverTimeoutRef.current) {
+          clearTimeout(receiverTimeoutRef.current);
+          receiverTimeoutRef.current = null;
+        }
+        setIsReceiverConnecting(false);
+        setErrorMessage('Signaling server connection error. Please check your network and try again.');
+      }
     };
-  }, [cleanupConnections, startHeartbeat, stopHeartbeat, startDiagnosticsLoop, attemptWsReconnect, stream]);
+  }, [cleanupConnections, startHeartbeat, stopHeartbeat, setupReceiverPeerConnection, attemptWsReconnect]);
 
   useEffect(() => {
     startReceiverSessionRef.current = startReceiverSession;
@@ -675,8 +795,10 @@ export const App: React.FC = () => {
               });
 
               localStreamRef.current = displayStream;
+              streamRef.current = displayStream;
               setStream(displayStream);
 
+              pendingIceCandidatesRef.current = [];
               const pc = new RTCPeerConnection(RTC_CONFIG);
               pcRef.current = pc;
 
@@ -686,25 +808,7 @@ export const App: React.FC = () => {
                   track.contentHint = 'detail';
                 }
 
-                const sender = pc.addTrack(track, displayStream);
-
-                // Set sender encoding parameters to avoid aggressive blurriness and latency spikes
-                try {
-                  const params = sender.getParameters();
-                  if (params) {
-                    if (!params.encodings || params.encodings.length === 0) {
-                      params.encodings = [{}];
-                    }
-                    params.encodings[0].maxBitrate = 6000000; // 6 Mbps cap for LAN/Wi-Fi
-                    params.encodings[0].networkPriority = 'high';
-                    params.degradationPreference = 'maintain-resolution';
-                    sender.setParameters(params).catch((err) => {
-                      console.warn('[WebRTC] sender.setParameters warning:', err);
-                    });
-                  }
-                } catch (err) {
-                  console.warn('[WebRTC] Error configuring sender parameters:', err);
-                }
+                pc.addTrack(track, displayStream);
 
                 // Handle user stopping screen share via browser floating controls
                 track.onended = () => {
@@ -715,8 +819,21 @@ export const App: React.FC = () => {
 
               pc.onicecandidate = (iceEvent) => {
                 if (iceEvent.candidate) {
-                  safeSend({ type: 'SIGNAL_ICE', candidate: iceEvent.candidate.toJSON() });
+                  console.log('[WebRTC] Presenter generated local ICE candidate');
+                  const cand = iceEvent.candidate.toJSON
+                    ? iceEvent.candidate.toJSON()
+                    : {
+                        candidate: iceEvent.candidate.candidate,
+                        sdpMid: iceEvent.candidate.sdpMid,
+                        sdpMLineIndex: iceEvent.candidate.sdpMLineIndex,
+                        usernameFragment: iceEvent.candidate.usernameFragment,
+                      };
+                  safeSend({ type: 'SIGNAL_ICE', candidate: cand });
                 }
+              };
+
+              pc.oniceconnectionstatechange = () => {
+                console.log('[WebRTC] Presenter ICE connection state:', pc.iceConnectionState);
               };
 
               pc.onconnectionstatechange = () => {
@@ -738,17 +855,38 @@ export const App: React.FC = () => {
                   webrtcGraceTimerRef.current = setTimeout(() => {
                     if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                       console.log('[Presenter] WebRTC grace period expired.');
-                      handleStopSharing();
+                      setRecoveryMessage('Connection lost with display.');
                     }
                   }, 6000);
                 } else if (pc.connectionState === 'failed') {
-                  handleStopSharing();
+                  console.log('[Presenter] WebRTC connection failed.');
+                  setRecoveryMessage('Direct peer connection failed. Please ensure both devices are on the same local network.');
                 }
               };
 
               const offer = await pc.createOffer();
               await pc.setLocalDescription(offer);
-              safeSend({ type: 'SIGNAL_OFFER', sdp: offer });
+              console.log('[WebRTC] Created and set local offer, sending SIGNAL_OFFER');
+              safeSend({
+                type: 'SIGNAL_OFFER',
+                sdp: { type: offer.type, sdp: offer.sdp },
+              });
+
+              // Apply degradation preference safely if supported after setLocalDescription
+              try {
+                const senders = pc.getSenders();
+                const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+                if (videoSender) {
+                  const params = videoSender.getParameters();
+                  if (params && params.encodings && params.encodings.length > 0) {
+                    params.encodings[0].maxBitrate = 6000000;
+                    params.degradationPreference = 'maintain-resolution';
+                    videoSender.setParameters(params).catch(() => {});
+                  }
+                }
+              } catch {
+                // Ignore
+              }
             } catch (err: any) {
               console.error('[Presenter] Error capturing display media:', err);
               cleanupConnections();
@@ -765,26 +903,29 @@ export const App: React.FC = () => {
           case 'SIGNAL_ANSWER': {
             const pc = pcRef.current;
             if (!pc || !msg.sdp) return;
-            console.log('[Presenter] Received SDP answer');
+            console.log('[WebRTC] Presenter received SDP answer');
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+              console.log('[WebRTC] Presenter setRemoteDescription succeeded, processing queued ICE');
               processPendingIceCandidates(pc);
               setIsConnecting(false);
               setAppState('PRESENTER_CONNECTED');
             } catch (err) {
-              console.error('[Presenter] Error setting remote description:', err);
+              console.error('[WebRTC] Presenter error setting remote description:', err);
+              setRecoveryMessage('Failed to complete WebRTC handshake with display.');
             }
             break;
           }
 
           case 'SIGNAL_ICE': {
+            if (!msg.candidate) return;
             const pc = pcRef.current;
-            if (!pc || !msg.candidate) return;
-            if (pc.remoteDescription) {
+            if (pc && pc.remoteDescription && pc.signalingState !== 'closed') {
               pc.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch((err) => {
-                console.warn('[Presenter] Error adding ICE candidate:', err);
+                console.warn('[WebRTC] Presenter error adding ICE candidate:', err);
               });
             } else {
+              console.log('[WebRTC] Queued ICE candidate on presenter (waiting for remote description)');
               pendingIceCandidatesRef.current.push(msg.candidate);
             }
             break;
@@ -828,13 +969,13 @@ export const App: React.FC = () => {
       ws.onclose = () => {
         console.log('[Presenter WS] Disconnected');
         stopHeartbeat();
-        if (!isIntentionalStopRef.current && (pcRef.current || stream)) {
+        if (!isIntentionalStopRef.current && (pcRef.current || streamRef.current)) {
           attemptWsReconnect();
         }
       };
 
       ws.onerror = () => {
-        if (!pcRef.current && !stream) {
+        if (!pcRef.current && !streamRef.current) {
           cleanupConnections();
           setSavedSessionState(null);
           setErrorMessage(
@@ -844,7 +985,7 @@ export const App: React.FC = () => {
         }
       };
     },
-    [cleanupConnections, handleStopSharing, startHeartbeat, stopHeartbeat, startDiagnosticsLoop, attemptWsReconnect, stream]
+    [cleanupConnections, handleStopSharing, startHeartbeat, stopHeartbeat, startDiagnosticsLoop, attemptWsReconnect]
   );
 
   // SPA Navigation Helper
@@ -1025,6 +1166,7 @@ export const App: React.FC = () => {
         stream={stream}
         diagnostics={diagnostics ?? undefined}
         recoveryMessage={recoveryMessage}
+        onExit={handleCancel}
       />
     );
   }
@@ -1061,6 +1203,9 @@ export const App: React.FC = () => {
           <ReceiverWaitingScreen
             code={pairingCode}
             onCancel={handleCancel}
+            isConnecting={isReceiverConnecting}
+            errorMessage={errorMessage}
+            onRetry={startReceiverSession}
           />
         )}
 

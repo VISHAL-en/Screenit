@@ -10,10 +10,11 @@
     "build:client": "npm run build --prefix client",
     "build:server": "npm run build --prefix server",
     "start:server": "npm start --prefix server",
-    "test": "npm run test:signaling && npm run test:validation && npm run test:recovery",
+    "test": "npm run test:signaling && npm run test:validation && npm run test:recovery && npm run test:lifecycle",
     "test:signaling": "npm run --prefix server test:signaling",
     "test:validation": "npm run --prefix server test:validation",
-    "test:recovery": "npm run --prefix server test:recovery"
+    "test:recovery": "npm run --prefix server test:recovery",
+    "test:lifecycle": "npm run --prefix server test:lifecycle"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

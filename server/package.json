@@ -10,7 +10,8 @@
     "dev": "tsx watch src/server.ts",
     "test:signaling": "tsx src/test-signaling.ts",
     "test:validation": "tsx src/test-validation.ts",
-    "test:recovery": "tsx src/test-recovery.ts"
+    "test:recovery": "tsx src/test-recovery.ts",
+    "test:lifecycle": "tsx src/test-pairing-lifecycle.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
